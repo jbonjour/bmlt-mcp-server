@@ -1,0 +1,28 @@
+{
+  "name": "bmlt-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for the Basic Meeting List Toolbox (BMLT) — query NA meeting data via natural language",
+  "main": "dist/index.js",
+  "bin": {
+    "bmlt-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["mcp", "bmlt", "narcotics-anonymous", "na", "meetings"],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.11.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
