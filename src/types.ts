@@ -80,12 +80,3 @@ export interface SearchMeetingsParams {
   start_time_max?: string;   // "HH:MM"
 }
 
-export const WEEKDAY_NAMES: Record<string, string> = {
-  "1": "Sunday",
-  "2": "Monday",
-  "3": "Tuesday",
-  "4": "Wednesday",
-  "5": "Thursday",
-  "6": "Friday",
-  "7": "Saturday"
-};

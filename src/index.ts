@@ -27,6 +27,11 @@ const transport = (process.env.TRANSPORT ?? "stdio").toLowerCase();
 if (transport === "http") {
   const port = parseInt(process.env.PORT ?? "3000", 10);
 
+  const mcpTransport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true
+  });
+
   const httpServer = createServer(async (req, res) => {
     if (req.method !== "POST" || req.url !== "/mcp") {
       res.writeHead(404);
@@ -46,27 +51,22 @@ if (transport === "http") {
         return;
       }
 
-      const mcpTransport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-        enableJsonResponse: true
-      });
-
-      res.on("close", () => mcpTransport.close());
-
-      await server.connect(mcpTransport);
-
-      // Adapt req/res for the SDK's handleRequest
       const adaptedReq = Object.assign(req, { body });
       await mcpTransport.handleRequest(adaptedReq as Parameters<typeof mcpTransport.handleRequest>[0], res, body);
     });
   });
 
-  httpServer.listen(port, () => {
-    process.stderr.write(
-      `BMLT MCP server running at http://localhost:${port}/mcp\n` +
-      `  Default root server: ${DEFAULT_ROOT_SERVER}\n` +
-      `  Default service body: ${DEFAULT_SERVICE_BODY_ID} (Portland NA)\n`
-    );
+  server.connect(mcpTransport).then(() => {
+    httpServer.listen(port, () => {
+      process.stderr.write(
+        `BMLT MCP server running at http://localhost:${port}/mcp\n` +
+        `  Default root server: ${DEFAULT_ROOT_SERVER}\n` +
+        `  Default service body: ${DEFAULT_SERVICE_BODY_ID ?? "none (all bodies)"}\n`
+      );
+    });
+  }).catch((err: unknown) => {
+    process.stderr.write(`Fatal error: ${String(err)}\n`);
+    process.exit(1);
   });
 } else {
   // Default: stdio (for Claude Desktop, Claude Code, etc.)

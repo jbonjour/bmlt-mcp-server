@@ -33,10 +33,16 @@ function buildUrl(
  * Fetch JSON from the BMLT semantic interface.
  */
 async function bmltFetch<T>(url: string): Promise<T> {
-  const res = await fetch(url, {
-    headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(15_000)
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000)
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Could not reach BMLT server: ${msg}`);
+  }
 
   if (!res.ok) {
     throw new Error(`BMLT request failed: HTTP ${res.status} for ${url}`);
@@ -63,13 +69,16 @@ export async function searchMeetings(
     weekdays?: number[];
     formats?: string[];
     meetingName?: string;
+    location?: string;
     lat?: number;
     lng?: number;
     radiusMiles?: number;
     startTimeMin?: string;
     startTimeMax?: string;
+    maxResults?: number;
+    page?: number;
   }
-): Promise<BmltMeeting[]> {
+): Promise<{ meetings: BmltMeeting[]; total: number }> {
   const root = options.rootServer ?? DEFAULT_ROOT_SERVER;
 
   const params: Record<string, string | string[] | number | number[] | undefined> = {
@@ -100,6 +109,11 @@ export async function searchMeetings(
     params["meeting_name"] = options.meetingName;
   }
 
+  if (options.location) {
+    params["meeting_key"] = "location_municipality";
+    params["meeting_key_value"] = options.location;
+  }
+
   if (options.lat !== undefined && options.lng !== undefined) {
     params["lat_val"] = options.lat;
     params["long_val"] = options.lng;
@@ -109,12 +123,43 @@ export async function searchMeetings(
   if (options.startTimeMin) params["StartsAfter"] = options.startTimeMin;
   if (options.startTimeMax) params["StartsBefore"] = options.startTimeMax;
 
-  // BMLT search results are a JSON array
   const url = buildUrl(root, params);
   const data = await bmltFetch<BmltMeeting[] | { meetings: BmltMeeting[] }>(url);
+  const all: BmltMeeting[] = Array.isArray(data) ? data : (data as { meetings: BmltMeeting[] }).meetings ?? [];
 
-  // Some versions wrap in { meetings: [...] }
-  return Array.isArray(data) ? data : (data as { meetings: BmltMeeting[] }).meetings ?? [];
+  const total = all.length;
+  if (options.maxResults) {
+    const pageSize = options.maxResults;
+    const pageNum = options.page ?? 1;
+    const start = (pageNum - 1) * pageSize;
+    return { meetings: all.slice(start, start + pageSize), total };
+  }
+
+  return { meetings: all, total };
+}
+
+export async function getMeetingById(
+  meetingId: number,
+  options: { rootServer?: string; serviceBodyIds?: number[] } = {}
+): Promise<BmltMeeting | null> {
+  const root = options.rootServer ?? DEFAULT_ROOT_SERVER;
+
+  const params: Record<string, string | string[] | number | number[] | undefined> = {
+    switcher: "GetSearchResults",
+    lang_enum: "en",
+    "meeting_ids[0]": String(meetingId)
+  };
+
+  if (options.serviceBodyIds?.length) {
+    options.serviceBodyIds.forEach((id, i) => {
+      params[`services[${i}]`] = String(id);
+    });
+  }
+
+  const url = buildUrl(root, params);
+  const data = await bmltFetch<BmltMeeting[] | { meetings: BmltMeeting[] }>(url);
+  const meetings: BmltMeeting[] = Array.isArray(data) ? data : (data as { meetings: BmltMeeting[] }).meetings ?? [];
+  return meetings.find(m => String(m.id_bigint) === String(meetingId)) ?? null;
 }
 
 export async function getFormats(rootServer?: string): Promise<BmltFormat[]> {

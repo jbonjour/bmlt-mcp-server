@@ -1,8 +1,11 @@
-// Default BMLT root server (WSZF network — used by Portland NA, Contra Costa NA, etc.)
-export const DEFAULT_ROOT_SERVER = "https://bmlt.wszf.org/main_server";
+// Default BMLT root server — override with BMLT_ROOT_SERVER env var
+export const DEFAULT_ROOT_SERVER =
+  process.env.BMLT_ROOT_SERVER ?? "https://bmlt.wszf.org/main_server";
 
-// Portland NA service body ID on the WSZF root server
-export const DEFAULT_SERVICE_BODY_ID = 26;
+// Default service body ID — override with BMLT_SERVICE_BODY_ID env var (0 = no default filter)
+const _rawServiceBodyId = process.env.BMLT_SERVICE_BODY_ID;
+export const DEFAULT_SERVICE_BODY_ID: number | null =
+  _rawServiceBodyId ? parseInt(_rawServiceBodyId, 10) : 26;
 
 // Max characters to return in a single tool response before truncating
 export const CHARACTER_LIMIT = 50_000;

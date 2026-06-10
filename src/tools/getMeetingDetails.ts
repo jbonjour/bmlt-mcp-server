@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { DEFAULT_ROOT_SERVER, DEFAULT_SERVICE_BODY_ID } from "../constants.js";
-import { searchMeetings, getFormats } from "../services/bmlt.js";
+import { getMeetingById, getFormats } from "../services/bmlt.js";
 import { formatMeeting, buildFormatMap } from "../services/formatting.js";
 
 export function registerGetMeetingDetailsTool(server: McpServer): void {
@@ -39,12 +39,10 @@ Returns: Full meeting record including name, day, time, location, formats, virtu
     },
     async (params) => {
       const root = params.root_server_url ?? DEFAULT_ROOT_SERVER;
-      const serviceBodyIds = params.service_body_ids ?? [DEFAULT_SERVICE_BODY_ID];
+      const serviceBodyIds = params.service_body_ids ??
+        (DEFAULT_SERVICE_BODY_ID !== null ? [DEFAULT_SERVICE_BODY_ID] : undefined);
 
-      // Fetch all meetings and find the one matching the ID
-      // (BMLT doesn't have a direct single-meeting endpoint in the public semantic interface)
-      const meetings = await searchMeetings({ rootServer: root, serviceBodyIds });
-      const meeting = meetings.find(m => String(m.id_bigint) === String(params.meeting_id));
+      const meeting = await getMeetingById(params.meeting_id, { rootServer: root, serviceBodyIds });
 
       if (!meeting) {
         return {

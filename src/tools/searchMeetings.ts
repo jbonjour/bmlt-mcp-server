@@ -19,11 +19,14 @@ Args:
   - weekdays (string[], optional): Filter by day(s) of week. Accepts day names like "Monday", "tuesday", or numbers 1–7 (1=Sunday)
   - formats (string[], optional): Filter by format codes, e.g. ["O"] for Open, ["VM"] for Virtual, ["C"] for Closed
   - meeting_name (string, optional): Search meetings by name (partial match)
+  - location (string, optional): Filter by city/municipality name, e.g. "Portland" or "Vancouver"
   - lat (number, optional): Latitude for geo search. Requires lng.
   - lng (number, optional): Longitude for geo search. Requires lat.
   - radius_miles (number, optional): Search radius in miles when using lat/lng. Default: 10
   - start_time_min (string, optional): Only meetings starting at or after this time, format "HH:MM" (24h)
   - start_time_max (string, optional): Only meetings starting at or before this time, format "HH:MM" (24h)
+  - max_results (number, optional): Limit results per page. Use with page for pagination.
+  - page (number, optional): Page number when using max_results (1-indexed). Default: 1
   - response_format (string, optional): "markdown" (default) or "json"
 
 Returns: Formatted list of meetings with name, day, time, location, formats, and links.
@@ -32,7 +35,9 @@ Examples:
   - "Show all Portland NA meetings on Friday" → weekdays: ["Friday"]
   - "Find open meetings near downtown Portland" → formats: ["O"], lat: 45.5231, lng: -122.6765
   - "Virtual meetings this week" → formats: ["VM"]
-  - "Morning meetings" → start_time_max: "12:00"`,
+  - "Morning meetings" → start_time_max: "12:00"
+  - "Meetings in Vancouver" → location: "Vancouver"
+  - "First 20 meetings" → max_results: 20, page: 1`,
       inputSchema: z.object({
         root_server_url: z.string().url().optional()
           .describe(`BMLT root server URL (default: "${DEFAULT_ROOT_SERVER}")`),
@@ -47,6 +52,8 @@ Examples:
           .describe("Format codes to filter by, e.g. ['O'] for Open, ['VM'] for Virtual"),
         meeting_name: z.string().optional()
           .describe("Search meetings by name (partial match)"),
+        location: z.string().optional()
+          .describe("Filter by city/municipality name, e.g. 'Portland' or 'Vancouver'"),
         lat: z.number().min(-90).max(90).optional()
           .describe("Latitude for geographic search"),
         lng: z.number().min(-180).max(180).optional()
@@ -57,6 +64,10 @@ Examples:
           .describe("Earliest start time filter, format HH:MM (24h), e.g. '08:00'"),
         start_time_max: z.string().regex(/^\d{2}:\d{2}$/).optional()
           .describe("Latest start time filter, format HH:MM (24h), e.g. '12:00'"),
+        max_results: z.number().int().positive().optional()
+          .describe("Maximum number of results to return per page"),
+        page: z.number().int().positive().default(1)
+          .describe("Page number when using max_results (1-indexed, default: 1)"),
         response_format: z.enum(["markdown", "json"]).default("markdown")
           .describe("Output format: 'markdown' for human-readable or 'json' for structured data")
       }).strict(),
@@ -69,7 +80,8 @@ Examples:
     },
     async (params) => {
       const root = params.root_server_url ?? DEFAULT_ROOT_SERVER;
-      const serviceBodyIds = params.service_body_ids ?? [DEFAULT_SERVICE_BODY_ID];
+      const serviceBodyIds = params.service_body_ids ??
+        (DEFAULT_SERVICE_BODY_ID !== null ? [DEFAULT_SERVICE_BODY_ID] : undefined);
 
       // Normalize weekday inputs (strings or numbers) → BMLT numbers (1–7)
       const weekdays = params.weekdays?.map((d) => {
@@ -80,17 +92,20 @@ Examples:
         return num;
       });
 
-      const meetings = await searchMeetings({
+      const { meetings, total } = await searchMeetings({
         rootServer: root,
         serviceBodyIds,
         weekdays,
         formats: params.formats,
         meetingName: params.meeting_name,
+        location: params.location,
         lat: params.lat,
         lng: params.lng,
         radiusMiles: params.radius_miles,
         startTimeMin: params.start_time_min,
-        startTimeMax: params.start_time_max
+        startTimeMax: params.start_time_max,
+        maxResults: params.max_results,
+        page: params.page
       });
 
       if (!meetings.length) {
@@ -99,8 +114,12 @@ Examples:
         };
       }
 
+      const paginationNote = params.max_results && total > params.max_results
+        ? `\n\n_Showing page ${params.page} of ${Math.ceil(total / params.max_results)} (${total} total meetings). Use \`page\` to see more._`
+        : "";
+
       if (params.response_format === "json") {
-        const output = { count: meetings.length, meetings };
+        const output = { count: meetings.length, total, page: params.page, meetings };
         return {
           content: [{ type: "text", text: truncate(JSON.stringify(output, null, 2), CHARACTER_LIMIT) }],
           structuredContent: output
@@ -116,10 +135,10 @@ Examples:
         // Non-fatal — format codes will show raw
       }
 
-      const header = `Found **${meetings.length}** meeting${meetings.length === 1 ? "" : "s"}:\n\n---\n\n`;
+      const header = `Found **${meetings.length}** meeting${meetings.length === 1 ? "" : "s"}${total !== meetings.length ? ` (of ${total} total)` : ""}:\n\n---\n\n`;
       const body = meetings.map((m) => formatMeeting(m, formatMap)).join("\n\n---\n\n");
       return {
-        content: [{ type: "text", text: truncate(header + body, CHARACTER_LIMIT) }]
+        content: [{ type: "text", text: truncate(header + body + paginationNote, CHARACTER_LIMIT) }]
       };
     }
   );
