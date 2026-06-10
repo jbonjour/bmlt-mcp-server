@@ -35,15 +35,20 @@ export function formatMeeting(
     ? meeting.formats.split(",").map(k => formatMap[k.trim()] ?? k.trim()).join(", ")
     : "";
 
+  const venueLabel = meeting.venue_type === "2" ? "Virtual" : meeting.venue_type === "3" ? "Hybrid" : null;
+  const distance = meeting.distance_in_miles
+    ? `${parseFloat(meeting.distance_in_miles).toFixed(1)} mi away` : null;
+
   const lines = [
-    `**${meeting.meeting_name}**`,
+    `**${meeting.meeting_name}**${venueLabel ? ` *(${venueLabel})*` : ""}`,
     `📅 ${day} at ${time}`,
-    location ? `📍 ${location}` : null,
+    location ? `📍 ${location}${distance ? ` · ${distance}` : ""}` : (distance ? `📍 ${distance}` : null),
     meeting.location_info ? `ℹ️  ${meeting.location_info}` : null,
     formatLabels ? `🏷️  ${formatLabels}` : null,
     meeting.virtual_meeting_link ? `🔗 ${meeting.virtual_meeting_link}` : null,
     meeting.phone_meeting_number ? `📞 ${meeting.phone_meeting_number}` : null,
     meeting.comments ? `💬 ${meeting.comments}` : null,
+    meeting.root_server_uri ? `🌐 ${meeting.root_server_uri}` : null,
     `🆔 ID: ${meeting.id_bigint}`
   ];
 

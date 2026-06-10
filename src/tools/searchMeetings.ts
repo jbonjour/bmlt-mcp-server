@@ -11,16 +11,19 @@ export function registerSearchMeetingsTool(server: McpServer): void {
       title: "Search NA Meetings",
       description: `Search for Narcotics Anonymous meetings in the BMLT database.
 
-Returns a list of meetings matching the given filters. All filters are optional — omitting them returns all meetings for the default service body.
+Returns a list of meetings matching the given filters. All filters are optional.
+Default server is the global NA aggregator (all meetings worldwide).
 
 Args:
   - root_server_url (string, optional): BMLT root server URL. Defaults to "${DEFAULT_ROOT_SERVER}"
-  - service_body_ids (number[], optional): Filter by service body IDs. Defaults to [${DEFAULT_SERVICE_BODY_ID}] (Portland NA)
+  - service_body_ids (number[], optional): Filter by service body IDs. Omit to search all bodies.
   - weekdays (string[], optional): Filter by day(s) of week. Accepts day names like "Monday", "tuesday", or numbers 1–7 (1=Sunday)
   - formats (string[], optional): Filter by format codes, e.g. ["O"] for Open, ["VM"] for Virtual, ["C"] for Closed
-  - meeting_name (string, optional): Search meetings by name (partial match)
+  - venue_types (number[], optional): Filter by venue: 1=In-person, 2=Virtual, 3=Hybrid
+  - search_string (string, optional): Full-text search across all meeting fields (name, location, comments, etc.)
+  - meeting_name (string, optional): Search meetings by name only (partial match). Use search_string for broader search.
   - location (string, optional): Filter by city/municipality name, e.g. "Portland" or "Vancouver"
-  - lat (number, optional): Latitude for geo search. Requires lng.
+  - lat (number, optional): Latitude for geo search. Requires lng. Results sorted by distance.
   - lng (number, optional): Longitude for geo search. Requires lat.
   - radius_miles (number, optional): Search radius in miles when using lat/lng. Default: 10
   - start_time_min (string, optional): Only meetings starting at or after this time, format "HH:MM" (24h)
@@ -29,20 +32,20 @@ Args:
   - page (number, optional): Page number when using max_results (1-indexed). Default: 1
   - response_format (string, optional): "markdown" (default) or "json"
 
-Returns: Formatted list of meetings with name, day, time, location, formats, and links.
+Returns: Formatted list of meetings with name, day, time, location, formats, distance, and links.
 
 Examples:
-  - "Show all Portland NA meetings on Friday" → weekdays: ["Friday"]
-  - "Find open meetings near downtown Portland" → formats: ["O"], lat: 45.5231, lng: -122.6765
-  - "Virtual meetings this week" → formats: ["VM"]
+  - "NA meetings on Friday in Portland" → weekdays: ["Friday"], location: "Portland"
+  - "Open in-person meetings near me" → venue_types: [1], formats: ["O"], lat: ..., lng: ...
+  - "Virtual meetings tonight after 7pm" → venue_types: [2], start_time_min: "19:00"
+  - "Hybrid or virtual step study meetings" → venue_types: [2,3], search_string: "step study"
   - "Morning meetings" → start_time_max: "12:00"
-  - "Meetings in Vancouver" → location: "Vancouver"
-  - "First 20 meetings" → max_results: 20, page: 1`,
+  - "Meetings in Vancouver" → location: "Vancouver"`,
       inputSchema: z.object({
         root_server_url: z.string().url().optional()
           .describe(`BMLT root server URL (default: "${DEFAULT_ROOT_SERVER}")`),
         service_body_ids: z.array(z.number().int().positive()).optional()
-          .describe(`Service body IDs to search (default: [${DEFAULT_SERVICE_BODY_ID}] = Portland NA)`),
+          .describe("Service body IDs to search (omit to search all bodies on the server)"),
         weekdays: z.array(z.union([
           z.string().describe("Day name, e.g. 'Monday', 'tuesday', 'Wed'"),
           z.number().int().min(1).max(7).describe("Day number 1–7 (1=Sunday)")
@@ -50,8 +53,12 @@ Examples:
           .describe("Filter by day(s) of week"),
         formats: z.array(z.string()).optional()
           .describe("Format codes to filter by, e.g. ['O'] for Open, ['VM'] for Virtual"),
+        venue_types: z.array(z.number().int().min(1).max(3)).optional()
+          .describe("Filter by venue type: 1=In-person, 2=Virtual, 3=Hybrid"),
+        search_string: z.string().optional()
+          .describe("Full-text search across all meeting fields (name, location, comments, etc.)"),
         meeting_name: z.string().optional()
-          .describe("Search meetings by name (partial match)"),
+          .describe("Search by meeting name only (partial match). Use search_string for broader search."),
         location: z.string().optional()
           .describe("Filter by city/municipality name, e.g. 'Portland' or 'Vancouver'"),
         lat: z.number().min(-90).max(90).optional()
@@ -97,6 +104,8 @@ Examples:
         serviceBodyIds,
         weekdays,
         formats: params.formats,
+        venueTypes: params.venue_types,
+        searchString: params.search_string,
         meetingName: params.meeting_name,
         location: params.location,
         lat: params.lat,
@@ -104,8 +113,8 @@ Examples:
         radiusMiles: params.radius_miles,
         startTimeMin: params.start_time_min,
         startTimeMax: params.start_time_max,
-        maxResults: params.max_results,
-        page: params.page
+        pageSize: params.max_results,
+        pageNum: params.page
       });
 
       if (!meetings.length) {
@@ -114,8 +123,8 @@ Examples:
         };
       }
 
-      const paginationNote = params.max_results && total > params.max_results
-        ? `\n\n_Showing page ${params.page} of ${Math.ceil(total / params.max_results)} (${total} total meetings). Use \`page\` to see more._`
+      const paginationNote = params.max_results && meetings.length === params.max_results
+        ? `\n\n_Showing page ${params.page} · ${meetings.length} results. Use \`page: ${params.page + 1}\` to see more._`
         : "";
 
       if (params.response_format === "json") {
@@ -135,7 +144,7 @@ Examples:
         // Non-fatal — format codes will show raw
       }
 
-      const header = `Found **${meetings.length}** meeting${meetings.length === 1 ? "" : "s"}${total !== meetings.length ? ` (of ${total} total)` : ""}:\n\n---\n\n`;
+      const header = `Found **${meetings.length}** meeting${meetings.length === 1 ? "" : "s"}:\n\n---\n\n`;
       const body = meetings.map((m) => formatMeeting(m, formatMap)).join("\n\n---\n\n");
       return {
         content: [{ type: "text", text: truncate(header + body + paginationNote, CHARACTER_LIMIT) }]

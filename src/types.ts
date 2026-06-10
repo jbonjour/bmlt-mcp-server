@@ -31,6 +31,10 @@ export interface BmltMeeting {
   virtual_meeting_link: string;
   virtual_meeting_additional_info: string;
   format_shared_id_list: string;
+  venue_type: string;           // "1"=In-person, "2"=Virtual, "3"=Hybrid
+  root_server_uri: string;      // populated when querying the aggregator
+  distance_in_miles: string;    // populated when using geo search
+  distance_in_km: string;
   [key: string]: string;
 }
 
@@ -71,12 +75,16 @@ export interface SearchMeetingsParams {
   service_body_ids?: number[];
   weekdays?: number[];       // 1=Sunday ... 7=Saturday
   formats?: string[];        // format key strings e.g. ["O", "VM"]
+  venue_types?: number[];    // 1=In-person, 2=Virtual, 3=Hybrid
   meeting_name?: string;
+  search_string?: string;    // full-text search across all meeting fields
   location?: string;         // city/neighborhood/municipality text search
   lat?: number;
   lng?: number;
   radius_miles?: number;
   start_time_min?: string;   // "HH:MM"
   start_time_max?: string;   // "HH:MM"
+  max_results?: number;
+  page?: number;
 }
 

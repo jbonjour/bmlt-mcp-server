@@ -68,15 +68,17 @@ export async function searchMeetings(
     serviceBodyIds?: number[];
     weekdays?: number[];
     formats?: string[];
+    venueTypes?: number[];     // 1=In-person, 2=Virtual, 3=Hybrid
     meetingName?: string;
+    searchString?: string;     // full-text search across all meeting fields
     location?: string;
     lat?: number;
     lng?: number;
     radiusMiles?: number;
-    startTimeMin?: string;
-    startTimeMax?: string;
-    maxResults?: number;
-    page?: number;
+    startTimeMin?: string;     // "HH:MM"
+    startTimeMax?: string;     // "HH:MM"
+    pageSize?: number;
+    pageNum?: number;
   }
 ): Promise<{ meetings: BmltMeeting[]; total: number }> {
   const root = options.rootServer ?? DEFAULT_ROOT_SERVER;
@@ -105,7 +107,16 @@ export async function searchMeetings(
     });
   }
 
-  if (options.meetingName) {
+  if (options.venueTypes?.length) {
+    options.venueTypes.forEach((v, i) => {
+      params[`venue_types[${i}]`] = String(v);
+    });
+  }
+
+  if (options.searchString) {
+    params["SearchString"] = options.searchString;
+  } else if (options.meetingName) {
+    // meeting_name is a tighter name-only match; SearchString covers all fields
     params["meeting_name"] = options.meetingName;
   }
 
@@ -118,24 +129,38 @@ export async function searchMeetings(
     params["lat_val"] = options.lat;
     params["long_val"] = options.lng;
     params["geo_width_km"] = milesToKm(options.radiusMiles ?? 10);
+    params["sort_results_by_distance"] = "1";
   }
 
-  if (options.startTimeMin) params["StartsAfter"] = options.startTimeMin;
-  if (options.startTimeMax) params["StartsBefore"] = options.startTimeMax;
+  // BMLT expects separate hour and minute integers, not "HH:MM" strings
+  if (options.startTimeMin) {
+    const [h, m] = options.startTimeMin.split(":");
+    params["StartsAfterH"] = parseInt(h, 10);
+    params["StartsAfterM"] = parseInt(m, 10);
+  }
+  if (options.startTimeMax) {
+    const [h, m] = options.startTimeMax.split(":");
+    params["StartsBeforeH"] = parseInt(h, 10);
+    params["StartsBeforeM"] = parseInt(m, 10);
+  }
+
+  // Use server-side pagination when requested
+  if (options.pageSize) {
+    params["page_size"] = options.pageSize;
+    params["page_num"] = options.pageNum ?? 1;
+  }
 
   const url = buildUrl(root, params);
-  const data = await bmltFetch<BmltMeeting[] | { meetings: BmltMeeting[] }>(url);
-  const all: BmltMeeting[] = Array.isArray(data) ? data : (data as { meetings: BmltMeeting[] }).meetings ?? [];
+  const data = await bmltFetch<BmltMeeting[] | { meetings: BmltMeeting[]; total?: number }>(url);
 
-  const total = all.length;
-  if (options.maxResults) {
-    const pageSize = options.maxResults;
-    const pageNum = options.page ?? 1;
-    const start = (pageNum - 1) * pageSize;
-    return { meetings: all.slice(start, start + pageSize), total };
+  if (Array.isArray(data)) {
+    return { meetings: data, total: data.length };
   }
-
-  return { meetings: all, total };
+  const wrapped = data as { meetings: BmltMeeting[]; total?: number };
+  const meetings = wrapped.meetings ?? [];
+  // If server returns a total (aggregator mode may include it), use it; else fall back to page count
+  const total = wrapped.total ?? meetings.length;
+  return { meetings, total };
 }
 
 export async function getMeetingById(

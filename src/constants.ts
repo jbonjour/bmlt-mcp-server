@@ -1,11 +1,12 @@
 // Default BMLT root server — override with BMLT_ROOT_SERVER env var
+// Global aggregator covers all NA worldwide; Portland NA WSZF as fallback example
 export const DEFAULT_ROOT_SERVER =
-  process.env.BMLT_ROOT_SERVER ?? "https://bmlt.wszf.org/main_server";
+  process.env.BMLT_ROOT_SERVER ?? "https://aggregator.bmltenabled.org/main_server";
 
-// Default service body ID — override with BMLT_SERVICE_BODY_ID env var (0 = no default filter)
+// Default service body ID — override with BMLT_SERVICE_BODY_ID env var (unset = no filter = all bodies)
 const _rawServiceBodyId = process.env.BMLT_SERVICE_BODY_ID;
 export const DEFAULT_SERVICE_BODY_ID: number | null =
-  _rawServiceBodyId ? parseInt(_rawServiceBodyId, 10) : 26;
+  _rawServiceBodyId ? parseInt(_rawServiceBodyId, 10) : null;
 
 // Max characters to return in a single tool response before truncating
 export const CHARACTER_LIMIT = 50_000;

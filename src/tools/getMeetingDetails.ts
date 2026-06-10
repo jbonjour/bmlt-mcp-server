@@ -16,7 +16,7 @@ Use this after bmlt_search_meetings to get the complete record for a specific me
 Args:
   - meeting_id (number): The BMLT meeting ID (the "id_bigint" field from search results)
   - root_server_url (string, optional): BMLT root server URL. Defaults to "${DEFAULT_ROOT_SERVER}"
-  - service_body_ids (number[], optional): Service body IDs to scope the search. Defaults to [${DEFAULT_SERVICE_BODY_ID}]
+  - service_body_ids (number[], optional): Service body IDs to scope the search. Omit to search all bodies.
   - response_format (string, optional): "markdown" (default) or "json"
 
 Returns: Full meeting record including name, day, time, location, formats, virtual links, and all metadata fields.`,
@@ -26,7 +26,7 @@ Returns: Full meeting record including name, day, time, location, formats, virtu
         root_server_url: z.string().url().optional()
           .describe(`BMLT root server URL (default: "${DEFAULT_ROOT_SERVER}")`),
         service_body_ids: z.array(z.number().int().positive()).optional()
-          .describe(`Service body IDs (default: [${DEFAULT_SERVICE_BODY_ID}] = Portland NA)`),
+          .describe("Service body IDs to scope the search (omit to search all bodies)"),
         response_format: z.enum(["markdown", "json"]).default("markdown")
           .describe("Output format: 'markdown' or 'json'")
       }).strict(),
